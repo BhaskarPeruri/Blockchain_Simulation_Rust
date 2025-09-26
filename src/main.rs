@@ -48,49 +48,109 @@ impl Block {
         hash_str
     }
 
-    fn mine_block(&mut self){
+    fn mine_block(&mut self) {
         let mut iterations: u64 = 0;
-        loop{
+        loop {
             self.hash = self.calculate_hash();
             iterations += 1;
-            if !self.hash.is_empty() && &self.hash[..DIFFICULTY] == "00".
-            repeat(DIFFICULTY){
+            if !self.hash.is_empty() && &self.hash[..DIFFICULTY] == "00".repeat(DIFFICULTY) {
                 println!("Mining Block {}", self.index);
                 break;
             }
-            if(iterations > 100){
+            if (iterations > 100) {
                 println!("Mining in progress... ");
                 thread::sleep(Duration::from_millis(3000));
                 println!("Calculated Hash {}", self.hash);
                 break;
             }
             self.nonce += 1;
-
-
-            
         }
     }
 }
 
 impl fmt::Display for Block {
-    fn fmt(&self, f:&mut fmt::Formatter) -> fmt::Result{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let dateTime = chrono::NaiveDateTime::from_timestamp(self.timestamp as i64, 0);
         write!(f, "Block {} : {} at {}", self.index, self.data, dateTime)
     }
 }
 
-struct Blockchain{
+struct Blockchain {
     chain: Vec<Block>,
 }
 
-impl Blockchain{
-    fn new() -> Blockchain{
+impl Blockchain {
+    fn new() -> Blockchain {
         let genesis_block = Block::new(0, String::new(), String::from("Genesis Block"));
-        Blockchain{
+        Blockchain {
             chain: vec![genesis_block],
         }
     }
-    //9: 30
+    fn add_block(&mut self, mut new_block: Block) {
+        let previous_hash = self.chain.last().unwrap().hash.clone();
+        new_block.previous_hash = previous_hash;
+        new_block.mine_block();
+        self.chain.push(new_block);
+    }
+    fn get_total_blocks(&self) -> usize {
+        self.chain.len()
+    }
 }
 
-fn main() {}
+fn main() {
+    println!("Starting the Blockchain Simulation");
+    println!(" Enter your name:");
+
+    let mut miner_name = String::new();
+
+    std::io::stdin()
+        .read_line(&mut miner_name)
+        .expect("Failed to read input");
+    miner_name = miner_name.trim().to_string();
+
+    miner_name = miner_name.trim().to_string();
+
+    let trader_names = vec!["Bob", "Alice", "Charlie", "David", "Eve"];
+
+    let mut blockchain = Blockchain::new();
+
+    println!(" Let's start mining and simulating transactions");
+
+    let mut sender = miner_name.clone();
+
+    for i in 0..trader_names.len() {
+        println!("Mining Block {}", i + 1);
+        let recipient = if i < trader_names.len() - 1 {
+            trader_names[i + 1].to_string()
+        } else {
+            miner_name.clone()
+        };
+
+        let transaction = format!("{} sent  to {}", sender, recipient);
+
+        let new_block = Block::new((i + 1) as u32, String::new(), transaction.clone());
+
+        blockchain.add_block(new_block);
+
+        println!(" Transaction:{}", transaction);
+        sender = recipient;
+
+        println!();
+    }
+
+    let total_blocks = blockchain.get_total_blocks();
+    println!("Total Blocks: {}", total_blocks);
+
+    let blockchain_per_block = 137;
+    let blockchain_traded = total_blocks * blockchain_per_block;
+
+    println!("Total Blockchain Traded: {}", blockchain_traded);
+
+    let end_timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs();
+    let end_dateTime = chrono::NaiveDateTime::from_timestamp(end_timestamp as i64, 0);
+    println!("End Time: {}", end_dateTime);
+    println!("Mining Completed Successfully");
+}
