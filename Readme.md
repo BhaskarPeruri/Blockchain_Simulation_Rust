@@ -57,12 +57,12 @@ Enter your name:
 Miner1
 Let's start mining and simulating transactions
 Mining Block 1
-Mining in progress... 
+Mining in progress...
 Calculated Hash 00a1b2c3...
 Transaction: Miner1 sent to Bob
 
 Mining Block 2
-Mining in progress... 
+Mining in progress...
 Calculated Hash 00d4e5f6...
 Transaction: Bob sent to Alice
 
@@ -78,14 +78,6 @@ You can adjust the following constants in `main.rs`:
 - `DIFFICULTY` - Controls the mining difficulty (number of leading zeros required in hash)
 - `trader_names` - List of trader names for simulation
 - `blockchain_per_block` - Amount of blockchain awarded per block
-
-## Future Improvements
-
-- Add wallet functionality
-- Implement peer-to-peer networking
-- Add transaction validation
-- Implement consensus mechanism
-- Add a simple UI
 
 ## License
 
