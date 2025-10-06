@@ -127,7 +127,7 @@ impl Blockchain {
 fn main() {
     // Initialize the simulation
     println!("Starting the Blockchain Simulation");
-    println!("Enter your name:");
+    println!("Enter miner's name:");
 
     // Get miner's name from user input
     let mut miner_name = String::new();
@@ -179,7 +179,7 @@ fn main() {
     // Calculate and display total blockchain traded
     let reward_per_block = 137;  // Fixed reward per block
     let total_traded = total_blocks * reward_per_block;
-    println!("Total Blockchain Traded: {}", total_traded);
+    println!("Total Reward Traded: {}", total_traded);
 
     // Display end time of simulation
     let end_timestamp = SystemTime::now()
