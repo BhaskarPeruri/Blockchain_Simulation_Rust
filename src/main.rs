@@ -1,34 +1,29 @@
 // Import necessary dependencies
-use sha2::{Digest, Sha256};
-use std::fmt;
-use std::thread;
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
-use serde::{Serialize, Deserialize};
-
-// Import our transaction module
-mod transaction;
-use transaction::{Transaction, Mempool};
+use sha2::{Digest, Sha256};  // For cryptographic hashing
+use std::fmt;                // For custom display formatting
+use std::thread;             // For thread sleeping during mining
+use std::time::Duration;     // For time-based operations
+use std::time::{SystemTime, UNIX_EPOCH};  // For timestamp generation
 
 // Define mining difficulty - number of leading zeros required in hash
 const DIFFICULTY: usize = 2;
-const REWARD_AMOUNT: f64 = 100.0;  // Fixed reward for mining a block
 
 /// Represents a single block in the blockchain
-#[derive(Debug, Serialize, Deserialize)]
 struct Block {
-    index: u32,         // Position of the block in the chain
+    index: u32, // Index of the block in the chain
     previous_hash: String, // Hash of the previous block
     timestamp: u64,     // When the block was created (UNIX timestamp)
-    transactions: Vec<Transaction>, // Transactions in this block
+    data: String,       // Transaction data stored in the block
     nonce: u64,         // Number used once for mining
-    hash: String,       // This block's hash
+    hash: String, 
+    mined: bool,      // This block's hash
 }
 
 impl Block {
     /// Creates a new block with the given parameters
-    fn new(index: u32, previous_hash: String, transactions: Vec<Transaction>) -> Block {
-        let timestamp = SystemTime::now()
+    fn new(index: u32, previous_hash: String, data: String) -> Block {
+        // Get current timestamp in seconds since UNIX epoch
+        let timestamp: u64 = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time Went Backwards")
             .as_secs();
@@ -37,217 +32,164 @@ impl Block {
             index,
             previous_hash,
             timestamp,
-            transactions,
-            nonce: 0,
-            hash: String::new(),
+            data,
+            nonce: 0,  // Initialize nonce to 0
+            hash: String::new(),  
+            mined: false// Hash will be calculated during mining
         }
     }
 
     /// Calculates the SHA-256 hash of the block
-    fn calculate_hash(&self) -> String {
-        let tx_hashes: String = self.transactions.iter()
-            .map(|tx| tx.calculate_hash())
-            .collect();
-            
+    fn calculate_hash(&mut self) -> String {
+        // Combine block data into a single string
         let data = format!(
             "{}{}{}{}{}",
-            self.index, self.previous_hash, self.timestamp, tx_hashes, self.nonce
+            self.index, self.previous_hash, self.timestamp, self.data, self.nonce
         );
         
+        // Create SHA-256 hasher
         let mut hasher = Sha256::new();
         hasher.update(data.as_bytes());
-        format!("{:x}", hasher.finalize())
+        
+        // Finalize hash and convert to hexadecimal string
+        let result = hasher.finalize();
+        format!("{:x}", result)
     }
 
     /// Mines the block by finding a valid hash that meets the difficulty requirement
     fn mine_block(&mut self) {
         let mut iterations: u64 = 0;
         loop {
+            // Calculate hash with current nonce
             self.hash = self.calculate_hash();
             iterations += 1;
             
+            // Check if hash meets difficulty requirement (starts with N zeros)
             if !self.hash.is_empty() && &self.hash[..DIFFICULTY] == "00".repeat(DIFFICULTY) {
-                println!("Mined Block {} with hash: {}...", self.index, &self.hash[..10]);
+                println!("Mining Block {}", self.index);
+                self.mined = true;
                 break;
             }
             
-            if iterations % 1000 == 0 {
-                println!("Mining in progress... (Nonce: {})", self.nonce);
-                thread::sleep(Duration::from_millis(100));
+            // Safety mechanism to prevent infinite loops
+            if iterations > 100 {
+                println!("Mining in progress... ");
+                thread::sleep(Duration::from_millis(3000));
+                println!("Calculated Hash {}", self.hash);
+                break;
             }
             
+            // Try next nonce value
             self.nonce += 1;
         }
     }
 }
 
+// Implement custom display formatting for Block
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Convert UNIX timestamp to readable date-time
         let date_time = chrono::NaiveDateTime::from_timestamp(self.timestamp as i64, 0);
-        write!(
-            f, 
-            "Block {} ({}): {} transactions at {}", 
-            self.index, 
-            &self.hash[..8], 
-            self.transactions.len(),
-            date_time
-        )
+        write!(f, "Block {}: {} at {}", self.index, self.data, date_time)
     }
 }
 
 /// Represents the blockchain containing a vector of blocks
 struct Blockchain {
     chain: Vec<Block>,
-    mempool: Mempool,
 }
 
 impl Blockchain {
     /// Creates a new blockchain with a genesis block
     fn new() -> Blockchain {
-        let genesis_block = Block::new(0, String::from("0"), Vec::new());
-        let mut chain = Blockchain {
-            chain: vec![genesis_block],
-            mempool: Mempool::new(),
-        };
-        // Mine the genesis block
-        chain.chain[0].mine_block();
-        chain
+        let genesis_block = Block::new(0, String::new(), String::from("Genesis Block"));
+        Blockchain {
+            chain: vec![genesis_block],  // Initialize with genesis block
+        }
     }
     
     /// Adds a new block to the blockchain
     fn add_block(&mut self, mut new_block: Block) {
+        // Get hash of the last block in the chain
         let previous_hash = self.chain.last().unwrap().hash.clone();
         new_block.previous_hash = previous_hash;
+        
+        // Mine the new block
         new_block.mine_block();
+        
+        // Add the block to the chain
         self.chain.push(new_block);
     }
     
-    /// Creates a new transaction and adds it to the mempool
-    fn create_transaction(&mut self, sender: String, recipient: String, amount: f64, private_key: &str) -> bool {
-        let mut tx = Transaction::new(sender, recipient, amount);
-        tx.sign(private_key);
-        self.mempool.add_transaction(tx)
-    }
-    
-    /// Mines pending transactions and creates a new block
-    fn mine_pending_transactions(&mut self, miner_address: String) -> bool {
-        let transactions = self.mempool.get_transactions();
-        
-        if transactions.is_empty() {
-            println!("No transactions to mine!");
-            return false;
-        }
-        
-        // Create a coinbase transaction (mining reward)
-        let coinbase_tx = Transaction::new(
-            "0".to_string(),  // System generated
-            miner_address,
-            REWARD_AMOUNT
-        );
-        
-        // Combine coinbase transaction with pending transactions
-        let mut block_transactions = vec![coinbase_tx];
-        block_transactions.extend(transactions);
-        
-        // Create and mine the new block
-        let previous_hash = self.chain.last().unwrap().hash.clone();
-        let mut new_block = Block::new(
-            self.chain.len() as u32,
-            previous_hash,
-            block_transactions,
-        );
-        
-        new_block.mine_block();
-        self.chain.push(new_block);
-        
-        println!("Block successfully mined!");
-        true
-    }
-    
-    /// Returns the balance of a given address
-    fn get_balance(&self, address: &str) -> f64 {
-        let mut balance = 0.0;
-        
-        for block in &self.chain {
-            for tx in &block.transactions {
-                if tx.sender == address {
-                    balance -= tx.amount;
-                }
-                if tx.recipient == address {
-                    balance += tx.amount;
-                }
-            }
-        }
-        
-        balance
-    }
-    
-    /// Returns the number of blocks in the blockchain
+    /// Returns the total number of blocks in the blockchain
     fn get_total_blocks(&self) -> usize {
         self.chain.len()
-    }
-    
-    /// Returns the number of pending transactions in the mempool
-    fn get_pending_transaction_count(&self) -> usize {
-        self.mempool.len()
     }
 }
 
 fn main() {
+    // Initialize the simulation
     println!("Starting the Blockchain Simulation");
+    println!("Enter miner's name:");
+
+    // Get miner's name from user input
+    let mut miner_name = String::new();
+    std::io::stdin()
+        .read_line(&mut miner_name)
+        .expect("Failed to read input");
+    miner_name = miner_name.trim().to_string();
+
+    // Define list of traders for simulation
+    let trader_names = vec!["Bob", "Alice", "Charlie", "David", "Eve"];
     
-    // Initialize blockchain
+    // Initialize blockchain with genesis block
     let mut blockchain = Blockchain::new();
-    
-    // Create some test addresses
-    let miner_address = "miner1".to_string();
-    let alice = "alice".to_string();
-    let bob = "bob".to_string();
-    
-    // Simulate some transactions
-    println!("\nCreating some test transactions...");
-    
-    // Alice sends 50 to Bob
-    blockchain.create_transaction(
-        alice.clone(),
-        bob.clone(),
-        50.0,
-        "alice_private_key"  // In a real system, this would be a proper private key
-    );
-    
-    // Bob sends 20 back to Alice
-    blockchain.create_transaction(
-        bob.clone(),
-        alice.clone(),
-        20.0,
-        "bob_private_key"  // In a real system, this would be a proper private key
-    );
-    
-    println!("Pending transactions to mine: {}", blockchain.get_pending_transaction_count());
-    
-    // Mine pending transactions
-    println!("\nMining pending transactions...");
-    blockchain.mine_pending_transactions(miner_address.clone());
-    
-    // Check balances
-    println!("\nBalances after mining:");
-    println!("Miner: {}", blockchain.get_balance(&miner_address));
-    println!("Alice: {}", blockchain.get_balance(&alice));
-    println!("Bob: {}", blockchain.get_balance(&bob));
-    
-    // Print blockchain info
-    println!("\nBlockchain Info:");
-    println!("Total blocks: {}", blockchain.get_total_blocks());
-    
-    // Print all blocks
-    println!("\nBlockchain:");
-    for (i, block) in blockchain.chain.iter().enumerate() {
-        println!("Block {}: Hash: {}...", i, &block.hash[..10]);
-        println!("  Transactions: {}", block.transactions.len());
-        for tx in &block.transactions {
-            println!("    {} -> {}: {}", tx.sender, tx.recipient, tx.amount);
-        }
+
+    println!("Let's start mining and simulating transactions");
+
+    // Start with miner as the initial sender
+    let mut sender = miner_name.clone();
+
+    // Simulate transactions between traders
+    for i in 0..trader_names.len() {
+        println!("Mining Block {}", i + 1);
+        
+        // Determine recipient (next trader or back to miner)
+        let recipient = if i < trader_names.len() - 1 {
+            trader_names[i + 1].to_string()
+        } else {
+            miner_name.clone()
+        };
+
+        // Create transaction string
+        let transaction = format!("{} sent to {}", sender, recipient);
+
+        // Create and add new block with transaction
+        let new_block = Block::new((i + 1) as u32, String::new(), transaction.clone());
+        blockchain.add_block(new_block);
+
+        println!("Transaction: {}", transaction);
+        
+        // Update sender for next transaction
+        sender = recipient;
+        println!();  // Add blank line for better readability
     }
-    
-    println!("\nSimulation completed successfully!");
+
+    // Display simulation results
+    let total_blocks = blockchain.get_total_blocks();
+    println!("Total Blocks: {}", total_blocks);
+
+    // Calculate and display total blockchain traded
+    let reward_per_block = 137;  // Fixed reward per block
+    let total_traded = total_blocks * reward_per_block;
+    println!("Total Reward Traded: {}", total_traded);
+
+    // Display end time of simulation
+    let end_timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs();
+    let end_date_time = chrono::NaiveDateTime::from_timestamp(end_timestamp as i64, 0);
+    println!("End Time: {}", end_date_time);
+    println!("Mining Completed Successfully");
 }
