@@ -10,12 +10,13 @@ const DIFFICULTY: usize = 2;
 
 /// Represents a single block in the blockchain
 struct Block {
-    index: u32,         // Position of the block in the chain
+    index: u32, // Index of the block in the chain
     previous_hash: String, // Hash of the previous block
     timestamp: u64,     // When the block was created (UNIX timestamp)
     data: String,       // Transaction data stored in the block
     nonce: u64,         // Number used once for mining
-    hash: String,       // This block's hash
+    hash: String, 
+    mined: bool,      // This block's hash
 }
 
 impl Block {
@@ -33,7 +34,8 @@ impl Block {
             timestamp,
             data,
             nonce: 0,  // Initialize nonce to 0
-            hash: String::new(),  // Hash will be calculated during mining
+            hash: String::new(),  
+            mined: false// Hash will be calculated during mining
         }
     }
 
@@ -65,6 +67,7 @@ impl Block {
             // Check if hash meets difficulty requirement (starts with N zeros)
             if !self.hash.is_empty() && &self.hash[..DIFFICULTY] == "00".repeat(DIFFICULTY) {
                 println!("Mining Block {}", self.index);
+                self.mined = true;
                 break;
             }
             
